@@ -264,6 +264,10 @@ check_grid <- function(d) {
     stop("Other than 'row' and 'col', variable names of a custom grid ",
       "must begin with 'code' or 'name'", call. = FALSE)
 
+  idx <- which(sapply(d, is.factor))
+  for (ii in idx)
+    d[[ii]] <- as.character(d[[ii]])
+
   if (length(which(grepl("^code", nms2))) == 0)
     stop("A custom grid must have at least one column beginning with 'code'", call. = FALSE)
   if (length(which(grepl("^name", nms2))) == 0)
@@ -289,8 +293,11 @@ check_grid <- function(d) {
 
 #' Get a list of valid grid names
 #' @export
-get_grid_names <- function()
+get_grid_names <- function() {
+  message("Note: More grids are available by name as listed here: ",
+    "https://raw.githubusercontent.com/hafen/grid-designer/master/grid_list.json")
   .valid_grids
+}
 
 get_grid <- function(grid) {
   if (is.character(grid)) {
@@ -300,9 +307,18 @@ get_grid <- function(grid) {
       message("grid '", grid, "' not found in package, checking online...")
       url <- sprintf("https://raw.githubusercontent.com/hafen/grid-designer/master/grids/%s.csv",
         grid)
-      grd <- suppressWarnings(try(utils::read.csv(url, stringsAsFactors = FALSE), silent = TRUE))
-      if (inherits(grd, "try-error")) {
+
+      tmp <- suppressWarnings(try(
+        utils::read.csv(url, stringsAsFactors = FALSE, nrows = 1),
+        silent = TRUE))
+      if (inherits(tmp, "try-error")) {
         stop("grid '", grid, "' not recognized...")
+      # all columns other than "row" and "col" will be strings (names and codes)
+      cls <- ifelse(names(tmp) %in% c("row", "col"), "integer", "character")
+      # use read.csv simply because it means one less dependency...
+      grd <- utils::read.csv(url, colClasses = cls,
+          stringsAsFactors = FALSE,
+          na.strings = NULL) # grid cannot have NAs
       }
     }
   } else if (inherits(grid, "data.frame")) {
