@@ -4,12 +4,16 @@
 \alias{grid_design}
 \title{Interactively design a grid}
 \usage{
-grid_design(data = NULL, img = NULL)
+grid_design(data = NULL, img = NULL, label = "code", auto_img = TRUE)
 }
 \arguments{
-\item{data}{a data frame containing a grid to start from or NULL if starting from scratch}
+\item{data}{A data frame containing a grid to start from or NULL if starting from scratch.}
 
-\item{img}{optional URL pointing to a reference image containing a geographic map of the entities in the grid}
+\item{img}{An optional URL pointing to a reference image containing a geographic map of the entities in the grid.}
+
+\item{label}{An optional column name to use as the label for plotting the original geography, if attached to \code{data}.}
+
+\item{auto_img}{If the original geography is attached to \code{data}, should a plot of that be created and uploaded to the viewer?}
 }
 \description{
 Interactively design a grid

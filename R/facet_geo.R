@@ -57,8 +57,13 @@ facet_geo <- function(facets, ..., grid = "us_state_grid1", label = NULL, move_a
     e2$facets <- "facet_col" # we will create a new column "facet_col"
     # this is done below in get_full_geo_data()
 
-    tmp <- get_full_geo_data(e1$data, grd, facet_col, label_col)
+    # update the data to layers if specified independent of global data
+    other_data <- lapply(e1$layers, function(x) x$data)
+
+    tmp <- get_full_geo_data(e1$data, grd, facet_col, label_col, other_data)
     e1$data <- tmp$dat
+    for (ii in seq_along(e1$layers))
+      e1$layers[[ii]]$data <- tmp$other_data[[ii]]
     grd <- tmp$grd
 
     e1 <- e1 %+% do.call(ggplot2::facet_wrap, e2)
@@ -74,11 +79,15 @@ facet_geo <- function(facets, ..., grid = "us_state_grid1", label = NULL, move_a
 #' Print geofaceted ggplot2 object
 #'
 #' @param x plot object
-#' @param ... ignored
+#' @param newpage draw new (empty) page first?
+#' @param vp viewport to draw plot in
+#' @param ... other arguments not used by this method
 #' @importFrom gtable gtable_filter
 #' @importFrom graphics plot
 #' @export
-print.facet_geo <- function(x, ...) {
+print.facet_geo <- function(x, newpage = is.null(vp), vp = NULL, ...) {
+  if (newpage) grid::grid.newpage()
+
   attrs <- attr(x, "geofacet")
   grd <- attrs$grid
 
@@ -126,26 +135,43 @@ print.facet_geo <- function(x, ...) {
 
   idx <- which(is.na(grd$label))
   tmp <- setdiff(g$layout$name, c(grd$strip[idx], grd$panel[idx], extra_rgx))
-  rgx <- paste0("(^", paste(tmp, collapse = "$|^"), "$)")
+  # rgx <- paste0("(^", paste(tmp, collapse = "$|^"), "$)")
 
   # TODO: look into using extra grid space to draw cartographic map
   # https://github.com/baptiste/gridextra/wiki/gtable
   # https://stackoverflow.com/questions/30532889/ggplot-overlay-two-plots
 
-  graphics::plot(gtable::gtable_filter(g, rgx, trim = FALSE))
+  g <- gf_gtable_filter(g, tmp, trim = FALSE)
+  # g <- gtable::gtable_filter(g, rgx, trim = FALSE)
+  grid::grid.draw(g)
+}
+
+#' Plot geofaceted ggplot2 object
+#'
+#' @param x plot object
+#' @param ... ignored
+#' @importFrom gtable gtable_filter
+#' @importFrom graphics plot
+#' @export
+plot.facet_geo <- function(x, ...) {
+  print.facet_geo(x, ...)
 }
 
 #' Plot a preview of a grid
 #'
 #' @param x a data frame containing a grid
-#' @param label the column should be used for text labels
+#' @param label the column name in \code{x} that should be used for text labels in the grid plot
+#' @param label_raw the column name in the optional SpatialPolygonsDataFrame attached to \code{x} that should be used for text labels in the raw geography plot
 #' @export
 #' @importFrom ggplot2 ggplot geom_rect geom_text aes xlim ylim
+#' @importFrom gridExtra grid.arrange
 #' @examples
 #' grid_preview(us_state_grid2)
 #' grid_preview(eu_grid1, label = "name")
-grid_preview <- function(x, label = NULL) {
-  x <- get_grid(x)
+grid_preview <- function(x, label = NULL, label_raw = NULL) {
+
+  if (!inherits(x, "geofacet_grid"))
+    x <- get_grid(x)
 
   x <- check_grid(x)
   x$col <- factor(x$col, levels = seq_len(max(x$col)))
@@ -158,7 +184,7 @@ grid_preview <- function(x, label = NULL) {
     x$txt <- x[[label]]
   }
 
-  ggplot2::ggplot(x, ggplot2::aes_string("col", "row", label = "txt")) +
+  p <- ggplot2::ggplot(x, ggplot2::aes_string("col", "row", label = "txt")) +
     ggplot2::geom_rect(
       xmin = as.numeric(x$col) - 0.5, xmax = as.numeric(x$col) + 0.5,
       ymin = as.numeric(x$row) - 0.5, ymax = as.numeric(x$row) + 0.5,
@@ -166,13 +192,37 @@ grid_preview <- function(x, label = NULL) {
     ggplot2::ylim(levels(x$row)) +
     ggplot2::xlim(levels(x$col)) +
     ggplot2::geom_text()
+
+  spdf <- attr(x, "spdf")
+  if (!is.null(spdf) && inherits(spdf, "SpatialPolygonsDataFrame")) {
+    if (is.null(label_raw)) {
+      if (label %in% names(spdf@data)) {
+        label_raw <- label
+      } else {
+        stop("Couldn't find a variable with name '", label, "' ",
+          "in the SpatialPolygonsDataFrame attached to the grid object. ",
+          "Please explicity provide a variable name to use for plotting ",
+          "This data using the argument label_raw.")
+      }
+    }
+
+    p2 <- plot_geo_raw(spdf, label = label_raw)
+    p <- gridExtra::grid.arrange(p2, p, nrow = 1)
+  } else {
+    plot(p)
+  }
+  invisible(p)
 }
 
 #' Interactively design a grid
 #'
-#' @param data a data frame containing a grid to start from or NULL if starting from scratch
-#' @param img optional URL pointing to a reference image containing a geographic map of the entities in the grid
+#' @param data A data frame containing a grid to start from or NULL if starting from scratch.
+#' @param img An optional URL pointing to a reference image containing a geographic map of the entities in the grid.
+#' @param label An optional column name to use as the label for plotting the original geography, if attached to \code{data}.
+#' @param auto_img If the original geography is attached to \code{data}, should a plot of that be created and uploaded to the viewer?
 #' @export
+#' @importFrom grDevices png dev.off
+#' @importFrom imguR upload_image
 #' @examples
 #' # edit aus_grid1
 #' grid_design(data = aus_grid1, img = "http://www.john.chapman.name/Austral4.gif")
@@ -180,20 +230,45 @@ grid_preview <- function(x, label = NULL) {
 #' grid_design()
 #' # arrange the alphabet
 #' grid_design(data.frame(code = letters))
-grid_design <- function(data = NULL, img = NULL) {
+grid_design <- function(data = NULL, img = NULL, label = "code", auto_img = TRUE) {
 
   if (!is.null(data)) {
+    # clean out data
+    for (vr in names(data)) {
+      if (is.factor(data[[vr]]))
+        data[[vr]] <- as.character(data[[vr]])
+      if (is.character(data[[vr]])) {
+        data[[vr]] <- gsub("\\\n", " ", data[[vr]])
+        # other things to get rid of?
+      }
+    }
+
     rows <- c(paste(names(data), collapse = ","),
       apply(data, 1, function(x) paste(x, collapse = ",")))
-    data <- paste(rows, collapse = "\n")
+    data_csv <- paste(rows, collapse = "\n")
   } else {
-    data <- ""
+    data_csv <- ""
+  }
+
+  spdf <- attr(data, "spdf")
+  if (auto_img && is.null(img) && !is.null(spdf) &&
+    inherits(spdf, "SpatialPolygonsDataFrame")) {
+
+    message("Attempting to create and upload image of original geography...")
+
+    p <- plot_geo_raw(spdf, label = label)
+    grDevices::png(tmpfile <- tempfile(), res = 150, width = 1000, height = 1000)
+    print(p)
+    grDevices::dev.off()
+    # system2("open", tmpfile)
+    res <- imguR::upload_image(tmpfile)
+    img <- res$link
   }
 
   if (is.null(img))
     img <- ""
 
-  url <- sprintf("https://hafen.github.io/grid-designer/#img=%s&data=%s", img, data)
+  url <- sprintf("https://hafen.github.io/grid-designer/#img=%s&data=%s", img, data_csv)
 
   if (Sys.getenv("GEOFACET_PKG_TESTING") == "") browseURL(URLencode(url))
 }
@@ -311,7 +386,7 @@ get_grid <- function(grid) {
       tmp <- suppressWarnings(try(
         utils::read.csv(url, stringsAsFactors = FALSE, nrows = 1),
         silent = TRUE))
-      if (inherits(tmp, "try-error")) {
+      if (inherits(tmp, "try-error"))
         stop("grid '", grid, "' not recognized...")
       # all columns other than "row" and "col" will be strings (names and codes)
       cls <- ifelse(names(tmp) %in% c("row", "col"), "integer", "character")
@@ -319,11 +394,10 @@ get_grid <- function(grid) {
       grd <- utils::read.csv(url, colClasses = cls,
           stringsAsFactors = FALSE,
           na.strings = NULL) # grid cannot have NAs
-      }
     }
   } else if (inherits(grid, "data.frame")) {
     grd <- check_grid(grid)
-    message_nice("You provided a user-specified grid. ",
+    message_nice("Note: You provided a user-specified grid. ",
       "If this is a generally-useful grid, please consider submitting it ",
       "to become a part of the geofacet package. You can do this easily by ",
       "calling:\ngrid_submit(__grid_df_name__)")
@@ -353,7 +427,7 @@ get_full_geo_grid <- function(grid) {
   grd
 }
 
-get_full_geo_data <- function(d, grd, facet_col, label_col = NULL) {
+get_full_geo_data <- function(d, grd, facet_col, label_col = NULL, other_data) {
   # check to make sure facet_col data matches that of grd
   ul <- unique(d[[facet_col]])
   set_nms <- c("row", "col", "row2", "col2", "panel", "strip")
@@ -385,8 +459,16 @@ get_full_geo_data <- function(d, grd, facet_col, label_col = NULL) {
   na_idx <- which(is.na(tmp))
   tmp[na_idx] <- sapply(seq_along(na_idx), function(a) paste0(rep(" ", a), collapse = ""))
 
+  for (ii in seq_along(other_data)) {
+    if (!inherits(other_data[[ii]], "waiver") && facet_col %in% names(other_data[[ii]])) {
+      conv_idx <- match(other_data[[ii]][[facet_col]], grd$label)
+      other_data[[ii]]$facet_col <- grd[[label_col]][conv_idx]
+      other_data[[ii]]$facet_col <- factor(other_data[[ii]]$facet_col, levels = tmp)
+    }
+  }
+
   d$facet_col <- factor(d$facet_col, levels = tmp)
 
   # need to update grd to have the right column
-  list(dat = d, grd = grd)
+  list(dat = d, grd = grd, other_data = other_data)
 }
