@@ -1,6 +1,6 @@
 Package: geofacet
 Title: 'ggplot2' Faceting Utilities for Geographical Data
-Version: 0.1.9
+Version: 0.1.10
 Authors@R: c(
     person("Ryan", "Hafen", email = "rhafen@gmail.com", role = c("aut", "cre")),
     person("Barret", "Schloerke", email = "schloerke@gmail.com", role = "ctb"))
@@ -12,12 +12,12 @@ LazyData: true
 Imports: ggplot2, gtable, graphics, rnaturalearth, sp, ggrepel, imguR,
         gridExtra, geogrid
 Suggests: testthat, covr, lintr, knitr, rmarkdown, packagedocs
-RoxygenNote: 6.0.1
+RoxygenNote: 6.1.1
 VignetteBuilder: knitr, packagedocs
 NeedsCompilation: no
-Packaged: 2018-03-29 21:42:19 UTC; hafen
+Packaged: 2019-03-13 18:13:52 UTC; hafen
 Author: Ryan Hafen [aut, cre],
   Barret Schloerke [ctb]
 Maintainer: Ryan Hafen <rhafen@gmail.com>
 Repository: CRAN
-Date/Publication: 2018-03-29 22:01:51 UTC
+Date/Publication: 2019-03-13 18:40:02 UTC
