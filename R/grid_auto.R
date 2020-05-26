@@ -1,6 +1,6 @@
-#' Generate a grid automatically from a country/continent name or a SpatialPolygonsDataFrame
+#' Generate a grid automatically from a country/continent name or a SpatialPolygonsDataFrame or `sf` polygons
 #'
-#' @param x A country/continent name or a SpatialPolygonsDataFrame to build a grid for.
+#' @param x A country/continent name, a SpatialPolygonsDataFrame or `sf` polygons to build a grid for.
 #' @param names An optional vector of variable names in \code{x@data} to use as "name_" columns in the resulting grid.
 #' @param codes An optional vector of variable names in \code{x@data} to use as "code_" columns in the resulting grid.
 #' @param seed An optional random seed sent to \code{\link[geogrid]{calculate_grid}}.
@@ -8,6 +8,8 @@
 #'
 #' The columns of the \code{@data} component of resulting shapefile (either user-specified or fetched from rnaturalearth) are those that will be available to \code{names} and \code{codes}.
 #' @importFrom utils tail
+#' @importFrom methods as
+#' @importFrom sp CRS
 #' @importFrom geogrid calculate_grid assign_polygons
 #' @export
 #' @examples
@@ -20,7 +22,7 @@
 #'
 #' # using a custom file (can be GeoJSON or shapefile)
 #' ff <- system.file("extdata", "bay_counties.geojson", package = "geogrid")
-#' bay_shp <- geogrid::read_polygons(ff)
+#' bay_shp <- sf::st_read(ff)
 #' grd <- grid_auto(bay_shp, seed = 1) # names are inferred
 #' grid_preview(grd, label = "name_county")
 #' grid_design(grd, label = "code_fipsstco")
@@ -33,7 +35,7 @@
 grid_auto <- function(x, names = NULL, codes = NULL, seed = NULL) {
   # if(!requireNamespace("geogrid", quietly = TRUE)) {
   #   stop("Package 'geogrid' is needed for this function to work. Please install it.\n",
-  #     "devtools::install_github(\"sassalley/geogrid\")",
+  #     "remotes::install_github(\"sassalley/geogrid\")",
   #   call. = FALSE)
   # }
 
@@ -47,6 +49,13 @@ grid_auto <- function(x, names = NULL, codes = NULL, seed = NULL) {
     }
     x <- get_ne_data(x)
     is_ne_data <- TRUE
+  } else if (inherits(x, "SpatialPolygonsDataFrame")) {
+    x@proj4string <- sp::CRS(as.character(NA))
+  } else {
+    x <- methods::as(x, "Spatial")
+    if (!inherits(x, "SpatialPolygonsDataFrame"))
+      stop("Please ensure you are using polygons")
+    x@proj4string <- sp::CRS(as.character(NA))
   }
 
   # x@data$ID__gfct <- seq_len(nrow(x@data))

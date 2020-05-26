@@ -1,6 +1,14 @@
+Version 0.2
+----------------------------------------------------------------------
+
+- Add many new grids
+- Update to be compatible with ggplot2 updates
+- Change vignette builder to pkgdown
+
 Version 0.1
 ----------------------------------------------------------------------
 
+- Add `get_geofacet_grob()` function (0.1.11)
 - Fix minor CRAN issue (0.1.10)
 - Add new grids (0.1.9)
 - Integration with geogrid package with new function `grid_auto()` (0.1.9)
