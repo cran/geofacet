@@ -7,9 +7,9 @@ knitr::opts_chunk$set(
 # knitr::opts_chunk$set(comment = NA)
 
 ## ----eval=FALSE---------------------------------------------------------------
-#  install.packages("geofacet")
-#  # or from github:
-#  # remotes::install_github("hafen/geofacet")
+# install.packages("geofacet")
+# # or from github:
+# # remotes::install_github("hafen/geofacet")
 
 ## -----------------------------------------------------------------------------
 library(geofacet)

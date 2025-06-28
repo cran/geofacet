@@ -2,7 +2,8 @@
 #'
 #' @param facets passed to \code{\link[ggplot2]{facet_wrap}}
 #' @param \ldots additional parameters passed to \code{\link[ggplot2]{facet_wrap}}
-#' @param grid character vector of the grid layout to use (currently only "us_state_grid1" and "us_state_grid2" are available)
+#' @param grid either a character vector of the grid layout to use (see `?grids` for the list and use `get_grid()` to inspect or `grid_preview()` to plot a specific grid),
+#' or a data.frame object containing a grid (e.g. an output from `grid_design()` or `grid_auto()`)
 #' @param label an optional string denoting the name of a column in \code{grid} to use for facet labels. If NULL, the variable that best matches that in the data specified with \code{facets} will be used for the facet labels.
 #' @param move_axes should axis labels and ticks be moved to the closest panel along the margins?
 #' @example man-roxygen/ex-facet_geo.R
@@ -16,7 +17,7 @@ facet_geo <- function(facets, ..., grid = "us_state_grid1", label = NULL, move_a
 #' @importFrom ggplot2 ggplot_add
 #' @importFrom ggplot2 %+%
 #' @export
-ggplot_add.facet_geo_spec <- function(object, plot, object_name) {
+ggplot_add.facet_geo_spec <- function(object, plot, object_name, ...) {
   facet_col <- setdiff(unlist(lapply(object$facets, as.character)), c("~", "+"))
   if (length(facet_col) > 1) {
     message_nice("Multiple facet columns specified... only using '", facet_col[1], "'")
@@ -74,7 +75,7 @@ ggplot_add.facet_geo_spec <- function(object, plot, object_name) {
 }
 
 #' Perform post-processing on a facet_geo ggplot object
-#' 
+#'
 #' @param x object of class 'facet_geo'
 #' @export
 get_geofacet_grob <- function(x) {
@@ -99,14 +100,19 @@ get_geofacet_grob <- function(x) {
       nr <- max(grd$row)
       for (ii in seq_len(nc)) {
         idx <- which(!is.na(grd$label[grd$col == ii]))
-        l1 <- paste0("axis-b-", ii, "-", nr)
+        b1 <- paste0("axis-b-", ii, "-", nr)
+        t1 <- paste0("axis-t-", ii, "-1")
         if (length(idx) > 0) {
           last <- max(idx)
-          l2 <- paste0("axis-b-", ii, "-", last)
-          g$layout[g$layout$name == l1, c("t", "b")] <-
-            g$layout[g$layout$name == l2, c("t", "b")]
+          b2 <- paste0("axis-b-", ii, "-", last)
+          g$layout[g$layout$name == b1, c("t", "b")] <-
+            g$layout[g$layout$name == b2, c("t", "b")]
+          first <- min(idx)
+          t2 <- paste0("axis-t-", ii, "-", first)
+          g$layout[g$layout$name == t1, c("t", "b")] <-
+          g$layout[g$layout$name == t2, c("t", "b")]
         } else {
-          extra_rgx <- c(extra_rgx, l1)
+          extra_rgx <- c(extra_rgx, b1)
         }
       }
     }
@@ -115,13 +121,18 @@ get_geofacet_grob <- function(x) {
       for (ii in seq_len(max(grd$row))) {
         idx <- which(!is.na(grd$label[grd$row == ii]))
         l1 <- paste0("axis-l-", ii, "-1")
+        r1 <- paste0("axis-r-", ii, "-", max(grd$col))
         if (length(idx) > 0) {
           first <- min(idx)
           l2 <- paste0("axis-l-", ii, "-", first)
           g$layout[g$layout$name == l1, c("l", "r")] <-
             g$layout[g$layout$name == l2, c("l", "r")]
+          last <- max(idx)
+          r2 <- paste0("axis-r-", ii, "-", last)
+          g$layout[g$layout$name == r1, c("l", "r")] <-
+            g$layout[g$layout$name == r2, c("l", "r")]
         } else {
-          extra_rgx <- c(extra_rgx, l1)
+          extra_rgx <- c(extra_rgx, r1, l1)
         }
       }
     }
@@ -236,7 +247,6 @@ grid_preview <- function(x, label = NULL, label_raw = NULL, do_plot = TRUE) {
 #' @param auto_img If the original geography is attached to \code{data}, should a plot of that be created and uploaded to the viewer?
 #' @export
 #' @importFrom grDevices png dev.off
-#' @importFrom imguR upload_image
 #' @examples
 #' # edit aus_grid1
 #' grid_design(data = aus_grid1, img = "http://www.john.chapman.name/Austral4.gif")
@@ -245,7 +255,6 @@ grid_preview <- function(x, label = NULL, label_raw = NULL, do_plot = TRUE) {
 #' # arrange the alphabet
 #' grid_design(data.frame(code = letters))
 grid_design <- function(data = NULL, img = NULL, label = "code", auto_img = TRUE) {
-
   if (!is.null(data)) {
     # clean out data
     for (vr in names(data)) {
@@ -260,6 +269,7 @@ grid_design <- function(data = NULL, img = NULL, label = "code", auto_img = TRUE
     rows <- c(paste(names(data), collapse = ","),
       apply(data, 1, function(x) paste(x, collapse = ",")))
     data_csv <- paste(rows, collapse = "\n")
+    data_csv <- gsub("&", "%26", data_csv)
   } else {
     data_csv <- ""
   }
@@ -275,7 +285,7 @@ grid_design <- function(data = NULL, img = NULL, label = "code", auto_img = TRUE
     print(p)
     grDevices::dev.off()
     # system2("open", tmpfile)
-    res <- imguR::upload_image(tmpfile)
+    res <- upload_image(tmpfile)
     img <- res$link
   }
 
@@ -285,6 +295,22 @@ grid_design <- function(data = NULL, img = NULL, label = "code", auto_img = TRUE
   url <- sprintf("https://hafen.github.io/grid-designer/#img=%s&data=%s", img, data_csv)
 
   if (Sys.getenv("GEOFACET_PKG_TESTING") == "") browseURL(URLencode(url))
+}
+
+#' @importFrom httr2 request req_headers req_body_file req_perform resp_status
+#'   resp_body_json
+upload_image <- function(path) {
+  req <- httr2::request("https://api.imgur.com/3/image") |>
+    httr2::req_headers(Authorization = "Client-ID 1bb8a830d134946") |>
+    httr2::req_body_file(path, type = "image/png")
+
+  tryres <- try(resp <- httr2::req_perform(req))
+  if (inherits(tryres, "try-error") || httr2::resp_status(resp) != 200) {
+    warning("Failed to upload image to imgur. ", call. = FALSE)
+    return("")
+  }
+
+  httr2::resp_body_json(resp)$data$link
 }
 
 #' Submit a grid to be included in the package
